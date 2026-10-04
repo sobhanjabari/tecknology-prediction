@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------- Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# ---------------------------------------------------------------- Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ---------------------------------------------------------------- Data & outputs
+# Generated exports from the openalex CLI and other modules
+openalex/out/
+# Default output dir for `python -m techintel.pipeline`
+out/
+# Default output dir for Networks/Networks.py
+results/
+
+# Large reference data (~232 MB) kept only as a WoS schema reference; no code
+# reads these files.
+cleaned_combined_data.csv
+cleaned_combined_data.xlsx
+
+# Credentials / local config for the OpenAlex polite pool
+.openalexrc
+.openalex/
+.env
+
+# ---------------------------------------------------------------- Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

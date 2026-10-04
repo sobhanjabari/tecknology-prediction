@@ -1,0 +1,35 @@
+# Superset of dependencies used across the notebooks and scripts in this repo.
+# No single module needs all of them — install per module (see README.md).
+#
+# NOTE: `openalex/` needs NONE of these. It is pure standard library.
+
+# --- Core data handling (used by nearly every module) -------------------------
+pandas
+numpy
+openpyxl                 # .xlsx read/write (also enables `openalex_cli --xlsx`)
+
+# --- Plotting -----------------------------------------------------------------
+matplotlib
+wordcloud
+
+# --- Networks / bibliometrics -------------------------------------------------
+networkx
+python-louvain           # imported as `community.community_louvain`
+
+# --- NLP preprocessing --------------------------------------------------------
+spacy
+nltk
+gensim
+
+# --- Topic modeling -----------------------------------------------------------
+bertopic
+umap-learn
+sentence-transformers
+hdbscan
+scikit-learn
+
+# --- Trend analysis & forecasting ---------------------------------------------
+scipy
+statsmodels
+ruptures
+tabulate

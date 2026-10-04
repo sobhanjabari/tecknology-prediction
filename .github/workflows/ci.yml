@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The whole suite is offline and needs only these two third-party packages.
+  CORE_DEPS: "pytest pandas networkx"
+
+jobs:
+  tests:
+    name: tests (${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+        include:
+          # One Windows leg, because the repo is developed on Windows and the
+          # path handling in the pipeline differs there.
+          - os: windows-latest
+            python-version: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ${{ env.CORE_DEPS }}
+
+      - name: Show versions
+        run: |
+          python -c "import sys, pandas, networkx; print(sys.version); print('pandas', pandas.__version__); print('networkx', networkx.__version__)"
+
+      - name: pytest
+        run: python -m pytest openalex/tests techintel/tests -q
+
+      - name: unittest (openalex)
+        run: python -m unittest discover -s openalex/tests -t .
+
+      - name: unittest (techintel)
+        run: python -m unittest discover -s techintel/tests -t .
+
+  pipeline:
+    name: pipeline end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas networkx
+
+      - name: Run the pipeline on synthetic data
+        run: python -m techintel.pipeline --demo 120 --out out/ci
+
+      - name: Verify the output bundle
+        run: python -m techintel.verify out/ci
+
+      - name: Assert the bundle contains what it claims
+        run: |
+          test -f out/ci/manifest.json
+          test -f out/ci/metrics.csv
+          test -f out/ci/summary.txt
+          # 5 networks x (full + giant) GraphML files
+          test "$(ls out/ci/graphml/*.graphml | wc -l)" -eq 10
+
+      - name: Verify fails on a tampered bundle
+        run: |
+          cp -r out/ci out/tampered
+          rm out/tampered/summary.txt
+          if python -m techintel.verify out/tampered; then
+            echo "::error::verify accepted an incomplete bundle"
+            exit 1
+          fi
+          echo "verify correctly rejected the tampered bundle (exit $?)"
+
+      - name: Empty placeholder CSV exits 2, as documented
+        run: |
+          set +e
+          # Networks.py resolves --csv relative to its own directory, so pass the
+          # bare filename: the 0-byte placeholder then triggers the empty-input
+          # path (exit 2) rather than the missing-file path.
+          python "Networks/Networks.py" --csv "acoustic sensor.csv" --out out/networks
+          code=$?
+          set -e
+          echo "Networks.py exited $code"
+          test "$code" -eq 2
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-bundle
+          path: out/ci
+          if-no-files-found: error
+
+  makefile:
+    name: Makefile targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas networkx
+
+      - name: make help parses the Makefile
+        run: make help
+
+      - name: make compile
+        run: make compile
+
+      - name: make demo
+        run: make demo DEMO_N=40 OUT=out/make
+
+      - name: make demo produces a valid bundle
+        run: python -m techintel.verify out/make/demo
+
+      - name: make pipeline with no INPUT fails cleanly
+        run: |
+          if make pipeline OUT=out/make; then
+            echo "::error::make pipeline should have failed without INPUT"
+            exit 1
+          fi
+          echo "make pipeline correctly failed without INPUT"
+
+      - name: make clean
+        run: make clean OUT=out/make

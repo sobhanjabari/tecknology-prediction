@@ -1,0 +1,211 @@
+{
+  "name": "Technology Intelligence - pipeline",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Runs the techintel analysis pipeline and validates its output bundle. Import with: n8n import:workflow --input=n8n/techintel-pipeline.json"
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "notesInFlow": true,
+      "notes": "Click 'Execute workflow' to run the pipeline once, on demand."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "22222222-2222-4222-8222-222222222222",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 220],
+      "notesInFlow": true,
+      "notes": "Re-runs the pipeline every 24 hours once the workflow is activated."
+    },
+    {
+      "parameters": {
+        "executeOnce": true,
+        "command": "python -m techintel.pipeline --demo 120 --out out/n8n"
+      },
+      "id": "33333333-3333-4333-8333-333333333333",
+      "name": "Run pipeline",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [260, 100],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "Working directory must be the repository root, or prepend `cd \"<repo>\" && `. Swap --demo 120 for `--input path/to/export.txt` for a real run. onError=continueRegularOutput is required: ExecuteCommand otherwise throws on a non-zero exit and the exit code is lost."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1a1b1c1-1111-4111-8111-111111111111",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "44444444-4444-4444-8444-444444444444",
+      "name": "Pipeline succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [520, 100],
+      "notesInFlow": true,
+      "notes": "ExecuteCommand emits {exitCode, stderr, stdout} on success and {error} when it fails, so the presence of exitCode is the success signal. Exit 1 (partial run) and exit 2 (fatal) both take the false branch; manifest.json carries the precise code."
+    },
+    {
+      "parameters": {
+        "executeOnce": true,
+        "command": "python -m techintel.verify out/n8n"
+      },
+      "id": "55555555-5555-4555-8555-555555555555",
+      "name": "Verify bundle",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [780, 0],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "Checks that the GraphML files, metrics.csv and summary.txt agree with manifest.json."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2a2b2c2-2222-4222-8222-222222222222",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "66666666-6666-4666-8666-666666666666",
+      "name": "Bundle valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1040, 0],
+      "notesInFlow": true,
+      "notes": "techintel.verify exits 0 for a complete bundle, 1 for an inconsistent one and 2 when the bundle is missing."
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "out/n8n/manifest.json",
+        "options": {}
+      },
+      "id": "77777777-7777-4777-8777-777777777777",
+      "name": "Read manifest",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1300, -80],
+      "notesInFlow": true,
+      "notes": "Exposes manifest.json as binary data for a downstream node (email, S3, database, HTTP request...)."
+    },
+    {
+      "parameters": {},
+      "id": "88888888-8888-4888-8888-888888888888",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1560, -80],
+      "notesInFlow": true,
+      "notes": "Attach your own delivery steps here."
+    },
+    {
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "Pipeline run failed. See the 'Run pipeline' node output for stdout/stderr; manifest.json (if written) records the precise exit code."
+      },
+      "id": "99999999-9999-4999-8999-999999999999",
+      "name": "Fail: pipeline failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [780, 220],
+      "notesInFlow": true,
+      "notes": "Marks the execution as failed so n8n's own error workflow/alerting fires."
+    },
+    {
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "Pipeline ran but its output bundle did not validate. See the 'Verify bundle' node output for the list of problems."
+      },
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "Fail: invalid bundle",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1300, 100],
+      "notesInFlow": true,
+      "notes": "The pipeline exited cleanly but the report bundle is incomplete or inconsistent."
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Run pipeline", "type": "main", "index": 0 }]]
+    },
+    "Schedule Trigger": {
+      "main": [[{ "node": "Run pipeline", "type": "main", "index": 0 }]]
+    },
+    "Run pipeline": {
+      "main": [[{ "node": "Pipeline succeeded?", "type": "main", "index": 0 }]]
+    },
+    "Pipeline succeeded?": {
+      "main": [
+        [{ "node": "Verify bundle", "type": "main", "index": 0 }],
+        [{ "node": "Fail: pipeline failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verify bundle": {
+      "main": [[{ "node": "Bundle valid?", "type": "main", "index": 0 }]]
+    },
+    "Bundle valid?": {
+      "main": [
+        [{ "node": "Read manifest", "type": "main", "index": 0 }],
+        [{ "node": "Fail: invalid bundle", "type": "main", "index": 0 }]
+      ]
+    },
+    "Read manifest": {
+      "main": [[{ "node": "Done", "type": "main", "index": 0 }]]
+    }
+  }
+}
